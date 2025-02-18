@@ -1,12 +1,18 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from "openai";
+import * as dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const prisma = new PrismaClient();
 
-
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+// Use process.env for Node.js environment variables
+const openai = new OpenAI({
+    apiKey: 'YOUR_OPENAI_API_KEY'
+    // Note Paste your OpenAI API key here hardcoded for now. The env aint working for some diabolical reason
+});
 
 interface WatchlistRequest {
     AnimeId: number;
@@ -147,22 +153,25 @@ export const getRecommendation = async (req: Request, res: Response): Promise<vo
                            "japanese_title": "Japanese title",
                            "synopsis": "Brief synopsis",
                            "image_url": "myanimelist image URL"
-                       }
-                       Do not include any markdown formatting, code blocks, or additional text.`;
+                       }`;
 
-        // Get the generative model
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{
+                role: "system",
+                content: `You are an anime recommendation system. Based on these anime: ${animeList}, recommend 5 similar anime. 
+                        Return ONLY a valid JSON array of objects with these exact properties: 
+                        {
+                            "title": "English title",
+                            "japanese_title": "Japanese title",
+                            "synopsis": "Brief synopsis",
+                            "image_url": "myanimelist image URL"
+                        }`
+            }],
+            response_format: { type: "json_object" }
+        });
 
-        // Generate content
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-
-        // Clean the response text before parsing
-        const cleanedText = text.replace(/^```json\s*|\s*```$/g, '').trim();
-
-        // Parse the JSON response
-        const recommendations = JSON.parse(cleanedText);
+        const recommendations = JSON.parse(completion.choices[0].message.content || "[]");
         console.log(recommendations);   
         res.status(200).json(recommendations);
 
